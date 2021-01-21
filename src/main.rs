@@ -1,5 +1,5 @@
 use anyhow::Result;
-use clap::{crate_authors, crate_description, crate_name, crate_version, App, Arg};
+use clap::{App, Arg, ArgMatches, crate_authors, crate_description, crate_name, crate_version};
 use flate2::read::GzDecoder;
 use reqwest;
 use serde_json::Value;
@@ -11,18 +11,18 @@ use tokio;
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    let (url, token, policy_path, _ret) = requirements();
-    let url1 = url.clone();
-    let token1 = token.clone();
-    let token2 = token.clone();
-    let (id_vector, _ret) = list_projects(url, token).await;
-    let (download_url_vector, _ret) = list_packages_per_project(id_vector, url1, token1).await;
-    download_bundle(download_url_vector, token2, policy_path).await?;
+    let m = requirements();
+    let url = m.value_of("url").unwrap().to_string();
+    let token = m.value_of("token").unwrap().to_string();
+    let policy_path = m.value_of("policy_path").unwrap().to_string();
+    let (id_vector, _ret) = list_projects(url.clone(), token.clone()).await;
+    let (download_url_vector, _ret) = list_packages_per_project(id_vector, url.clone(), token.clone()).await;
+    download_bundle(download_url_vector, token.clone(), policy_path).await?;
     Ok(())
 }
 
-fn requirements() -> (String, String, String, Result<()>) {
-    let m = App::new(crate_name!())
+fn requirements() -> ArgMatches<'static> {
+    App::new(crate_name!())
         .version(crate_version!())
         .author(crate_authors!())
         .about(crate_description!())
@@ -47,12 +47,7 @@ fn requirements() -> (String, String, String, Result<()>) {
                 .help("Default value from env var POLICY_PATH.")
                 .required(true),
         )
-        .get_matches();
-    let url = m.value_of("url").unwrap().to_string();
-    let token = m.value_of("token").unwrap().to_string();
-    let policy_path = m.value_of("policy_path").unwrap().to_string();
-
-    (url, token, policy_path, Ok(()))
+        .get_matches()
 }
 
 async fn list_packages_per_project(
