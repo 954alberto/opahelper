@@ -1,16 +1,22 @@
 use anyhow::Result;
 use clap::{App, Arg, ArgMatches, crate_authors, crate_description, crate_name, crate_version};
 use flate2::read::GzDecoder;
+use log::{debug, error, info, warn};
 use reqwest;
 use serde_json::Value;
+use simple_logger::SimpleLogger;
 use std::env;
 use std::fs::File;
 use std::io::prelude::*;
 use tar::Archive;
 use tokio;
 
+
+
 #[tokio::main]
 async fn main() -> Result<()> {
+    SimpleLogger::new().init().unwrap();
+
     let m = requirements();
     let url = m.value_of("url").unwrap().to_string();
     let token = m.value_of("token").unwrap().to_string();
