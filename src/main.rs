@@ -11,14 +11,13 @@ use std::io::prelude::*;
 use tar::Archive;
 use tokio;
 
-
 use url::{Url};
 
 
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    SimpleLogger::new().with_level(log::LevelFilter::Debug).init().unwrap();
+    SimpleLogger::new().with_level(log::LevelFilter::Trace).init().unwrap();
     let m = requirements();
     let url = m.value_of("url").unwrap().to_string();
     Url::parse(&url)?;
@@ -96,7 +95,9 @@ async fn list_packages_per_project(
 }
 
 async fn list_projects(url: String, token: String) -> (Vec<i32>, Result<(), reqwest::Error>) {
+
     let client = reqwest::Client::new();
+
     let url = format!("{}/api/v4/projects?per_page=500&sort=asc", url);
 
     let res = client
@@ -110,13 +111,17 @@ async fn list_projects(url: String, token: String) -> (Vec<i32>, Result<(), reqw
         .expect("Request failed");
 
     let v: Vec<Value> = serde_json::from_str(&res).unwrap();
+    
     let mut id_vector: Vec<i32> = Vec::new();
+    
     for i in &v {
         let id = i.get("id").unwrap().to_string();
         let my_int = id.parse::<i32>().unwrap();
         id_vector.push(my_int);
     }
+    
     return (id_vector, Ok(()));
+
 }
 
 async fn download_bundle(
