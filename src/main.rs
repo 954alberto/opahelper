@@ -13,8 +13,6 @@ use tokio;
 
 use url::{Url};
 
-
-
 #[tokio::main]
 async fn main() -> Result<()> {
     SimpleLogger::new().with_level(log::LevelFilter::Trace).init().unwrap();
