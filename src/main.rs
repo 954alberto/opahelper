@@ -9,6 +9,7 @@ use std::process;
 use std::env;
 use std::fs::File;
 use std::io::prelude::*;
+use std::path::Path;
 use tar::Archive;
 use tokio;
 
@@ -22,8 +23,12 @@ async fn main() -> Result<()> {
     Url::parse(&url)?;
     let token = m.value_of("token").unwrap().to_string();
     let policy_path = m.value_of("policy_path").unwrap().to_string();
+    if Path::new(&policy_path).exists() == false {
+        warn!("The provided path {} does not exist. Exiting...",policy_path);
+        process::exit(1);
+    }
+    info!("The provided path {} exist. Continuing...",policy_path);
     let (id_vector, _ret) = list_projects(url.clone(), token.clone()).await;
-
     let (download_url_vector, _ret) =
         list_packages_per_project(id_vector, url.clone(), token.clone()).await;
     download_bundle(download_url_vector, token.clone(), policy_path).await?;
@@ -124,6 +129,8 @@ async fn list_projects(url: String, token: String) -> (Vec<i32>, Result<(), reqw
         let my_int = id.parse::<i32>().unwrap();
         id_vector.push(my_int);
     }
+
+    info!("The provided token has access to {} projects.",id_vector.len());
 
     // println!("THIS IS THE LENGHT::::   {}",id_vector.len());
     // let check = id_vector.len();
