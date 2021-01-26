@@ -1,22 +1,36 @@
 use anyhow::Result;
-use clap::{App, Arg, ArgMatches, crate_authors, crate_description, crate_name, crate_version};
+use clap::{crate_authors, crate_description, crate_name, crate_version, App, Arg, ArgMatches};
 use flate2::read::GzDecoder;
+use log::{debug, error, info, warn};
 use reqwest;
 use serde_json::Value;
+use simple_logger::SimpleLogger;
+use std::process;
 use std::env;
 use std::fs::File;
 use std::io::prelude::*;
+use std::path::Path;
 use tar::Archive;
 use tokio;
 
+use url::{Url};
+
 #[tokio::main]
 async fn main() -> Result<()> {
+    SimpleLogger::new().with_level(log::LevelFilter::Debug).init().unwrap();
     let m = requirements();
     let url = m.value_of("url").unwrap().to_string();
+    Url::parse(&url)?;
     let token = m.value_of("token").unwrap().to_string();
     let policy_path = m.value_of("policy_path").unwrap().to_string();
+    if Path::new(&policy_path).exists() == false {
+        warn!("The provided path {} does not exist. Exiting...",policy_path);
+        process::exit(1);
+    }
+    info!("The provided path {} exist. Continuing...",policy_path);
     let (id_vector, _ret) = list_projects(url.clone(), token.clone()).await;
-    let (download_url_vector, _ret) = list_packages_per_project(id_vector, url.clone(), token.clone()).await;
+    let (download_url_vector, _ret) =
+        list_packages_per_project(id_vector, url.clone(), token.clone()).await;
     download_bundle(download_url_vector, token.clone(), policy_path).await?;
     Ok(())
 }
@@ -59,9 +73,7 @@ async fn list_packages_per_project(
     let mut download_url_vector: Vec<String> = Vec::new();
 
     for i in 0..id_vector.len() {
-        //println!("{}", id_vector[i]);
         let url_packages = format!("{}/api/v4/projects/{}/packages", url, id_vector[i]);
-        //println!("url: {:#?}", url);
         let res = client
             .get(&url_packages)
             .header("PRIVATE-TOKEN", &token)
@@ -72,28 +84,24 @@ async fn list_packages_per_project(
             .await
             .expect("Failed to list the packages from projects");
 
-        //println!("{:#?}", res);
         let v: Vec<Value> = serde_json::from_str(&res).unwrap();
         let vers = v[0].get("version").unwrap().to_string();
-        //println!("\nversion: {}\n", vers.trim_matches('"'));
 
         let version = vers.trim_matches('"').to_string();
-        //println!("\n: {}\n", version);
 
         let download_url = format!(
             "{}/api/v4/projects/{}/packages/generic/bundle/{}/bundle.tar.gz",
             url, id_vector[i], version
         );
-        //println!("\n{}\n", download_url);
         download_url_vector.push(download_url);
-
-        // download_bundle(download_url).await?;
     }
     return (download_url_vector, Ok(()));
 }
 
 async fn list_projects(url: String, token: String) -> (Vec<i32>, Result<(), reqwest::Error>) {
+
     let client = reqwest::Client::new();
+
     let url = format!("{}/api/v4/projects?per_page=500&sort=asc", url);
 
     let res = client
@@ -106,16 +114,35 @@ async fn list_projects(url: String, token: String) -> (Vec<i32>, Result<(), reqw
         .await
         .expect("Request failed");
 
-    //println!("{}", res);
     let v: Vec<Value> = serde_json::from_str(&res).unwrap();
+        
+    if v.len() == 0 {
+        info!("The provided token has access to {} projects. Exiting...",v.len());
+        process::exit(0x0100);
+    }
+
     let mut id_vector: Vec<i32> = Vec::new();
+    
+    
     for i in &v {
         let id = i.get("id").unwrap().to_string();
         let my_int = id.parse::<i32>().unwrap();
-        //println!("\n{}\n", id);
         id_vector.push(my_int);
     }
+
+    info!("The provided token has access to {} projects.",id_vector.len());
+
+    // println!("THIS IS THE LENGHT::::   {}",id_vector.len());
+    // let check = id_vector.len();
+    
+    // if &id_vector.len() = 0 {
+    //     info!("The provided token has access to {} projects. Exiting...",&id_vector.len());
+    // else {
+    //     info!("The provided token has access to {} projects",&id_vector.len());
+    // }
+
     return (id_vector, Ok(()));
+
 }
 
 async fn download_bundle(
@@ -125,10 +152,9 @@ async fn download_bundle(
 ) -> Result<()> {
     let client = reqwest::Client::new();
     let file_path = format!("{}/bundle.tar.gz", policy_path);
-    println!("{}",file_path);
+    println!("{}", file_path);
 
     for url in download_url_vector {
-        //println!("{}",url);
         let response = client
             .get(&url)
             .header("PRIVATE-TOKEN", &token)
@@ -137,16 +163,11 @@ async fn download_bundle(
             .bytes()
             .await?;
         let mut file = File::create(&file_path).expect("Creating file failed");
-        //println!("{:?}",response.bytes());
         let data: Result<Vec<_>, _> = response.bytes().collect();
         let data = data.expect("Unable to read data");
         file.write_all(&data).expect("Unable to write data");
         file.write_all(&data).expect("Writing to the file failed");
-
-        //println!("\nThis is the file_path:{}\n",&file_path);
-
         let tar_gz = File::open(&file_path)?;
-        
         let tar = GzDecoder::new(tar_gz);
         let mut archive = Archive::new(tar);
         archive.unpack(&policy_path)?;
