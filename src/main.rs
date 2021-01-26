@@ -1,7 +1,7 @@
 use anyhow::Result;
 use clap::{crate_authors, crate_description, crate_name, crate_version, App, Arg, ArgMatches};
 use flate2::read::GzDecoder;
-use log::{debug, error, info, warn};
+use log::{error, info};
 use reqwest;
 use serde_json::Value;
 use simple_logger::SimpleLogger;
@@ -27,7 +27,7 @@ async fn main() -> Result<()> {
         error!("The provided path {} does not exist. Exiting...",policy_path);
         process::exit(1);
     }
-    info!("The provided path {} exist. Continuing...",policy_path);
+    info!("The provided path {} does exist.",policy_path);
     let (id_vector, _ret) = list_projects(url.clone(), token.clone()).await;
     let (download_url_vector, _ret) =
         list_packages_per_project(id_vector, url.clone(), token.clone()).await;
@@ -113,6 +113,13 @@ async fn list_projects(url: String, token: String) -> (Vec<i32>, Result<(), reqw
         .text_with_charset("utf-8")
         .await
         .expect("Request failed");
+    
+        if res == String::from("{\"message\":\"401 Unauthorized\"}") {
+            error!("The provided token is unauthorized. Exiting...");
+            process::exit(1);
+        }
+
+
 
     let v: Vec<Value> = serde_json::from_str(&res).unwrap();
         
