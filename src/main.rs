@@ -110,17 +110,12 @@ async fn list_projects(url: String, token: String) -> (Vec<i32>, Result<(), reqw
         .expect("Request failed");
 
     let v: Vec<Value> = serde_json::from_str(&res).unwrap();
-    
-    //println!("THIS IS THE LENGHT::::   {:?}", v.len());
-
-
-    
+        
     if v.len() == 0 {
         info!("The provided token has access to {} projects. Exiting...",v.len());
         process::exit(0x0100);
     }
 
-    
     let mut id_vector: Vec<i32> = Vec::new();
     
     
