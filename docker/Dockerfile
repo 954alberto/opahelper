@@ -5,7 +5,7 @@ RUN apt-get update && apt-get -y install ca-certificates libssl-dev \
  && groupadd --gid 1000 -r opahelper \
  && useradd --uid 1000 -r -g opahelper opahelper
 
-COPY ../linux/release/opahelper /home/opahelper/opahelper
+COPY ../target/linux/release/opahelper /home/opahelper/opahelper
 
 RUN chown -R opahelper:opahelper /home/opahelper \
  && chmod +x /home/opahelper/opahelper
