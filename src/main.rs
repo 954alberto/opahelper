@@ -1,10 +1,11 @@
 use anyhow::Result;
 use clap::{crate_authors, crate_description, crate_name, crate_version, App, Arg, ArgMatches};
 use flate2::read::GzDecoder;
-//use log;
+use log::{debug, error, info, warn};
 use reqwest;
 use serde_json::Value;
 use simple_logger::SimpleLogger;
+use std::process;
 use std::env;
 use std::fs::File;
 use std::io::prelude::*;
@@ -15,7 +16,7 @@ use url::{Url};
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    SimpleLogger::new().with_level(log::LevelFilter::Trace).init().unwrap();
+    SimpleLogger::new().with_level(log::LevelFilter::Debug).init().unwrap();
     let m = requirements();
     let url = m.value_of("url").unwrap().to_string();
     Url::parse(&url)?;
@@ -110,14 +111,34 @@ async fn list_projects(url: String, token: String) -> (Vec<i32>, Result<(), reqw
 
     let v: Vec<Value> = serde_json::from_str(&res).unwrap();
     
+    //println!("THIS IS THE LENGHT::::   {:?}", v.len());
+
+
+    
+    if v.len() == 0 {
+        info!("The provided token has access to {} projects. Exiting...",v.len());
+        process::exit(0x0100);
+    }
+
+    
     let mut id_vector: Vec<i32> = Vec::new();
+    
     
     for i in &v {
         let id = i.get("id").unwrap().to_string();
         let my_int = id.parse::<i32>().unwrap();
         id_vector.push(my_int);
     }
+
+    // println!("THIS IS THE LENGHT::::   {}",id_vector.len());
+    // let check = id_vector.len();
     
+    // if &id_vector.len() = 0 {
+    //     info!("The provided token has access to {} projects. Exiting...",&id_vector.len());
+    // else {
+    //     info!("The provided token has access to {} projects",&id_vector.len());
+    // }
+
     return (id_vector, Ok(()));
 
 }
