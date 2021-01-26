@@ -24,7 +24,7 @@ async fn main() -> Result<()> {
     let token = m.value_of("token").unwrap().to_string();
     let policy_path = m.value_of("policy_path").unwrap().to_string();
     if Path::new(&policy_path).exists() == false {
-        warn!("The provided path {} does not exist. Exiting...",policy_path);
+        error!("The provided path {} does not exist. Exiting...",policy_path);
         process::exit(1);
     }
     info!("The provided path {} exist. Continuing...",policy_path);
@@ -117,8 +117,8 @@ async fn list_projects(url: String, token: String) -> (Vec<i32>, Result<(), reqw
     let v: Vec<Value> = serde_json::from_str(&res).unwrap();
         
     if v.len() == 0 {
-        info!("The provided token has access to {} projects. Exiting...",v.len());
-        process::exit(0x0100);
+        error!("The provided token has access to {} projects, expected at least 1. Exiting...",v.len());
+        process::exit(1);
     }
 
     let mut id_vector: Vec<i32> = Vec::new();
