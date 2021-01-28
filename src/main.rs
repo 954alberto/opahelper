@@ -5,14 +5,9 @@ use log::{error, info};
 use reqwest;
 use serde_json::Value;
 use simple_logger::SimpleLogger;
-use std::env;
-use std::fs::File;
-use std::io::prelude::*;
-use std::path::Path;
-use std::process;
+use std::{env, fs::File, io::prelude::*, path::Path, process};
 use tar::Archive;
 use tokio;
-
 use url::Url;
 
 #[tokio::main]
@@ -26,15 +21,9 @@ async fn main() -> Result<()> {
     Url::parse(&url)?;
     let token = m.value_of("token").unwrap().to_string();
     let policy_path = m.value_of("policy_path").unwrap().to_string();
-    if Path::new(&policy_path).exists() == false {
-        error!(
-            "The provided path {} does not exist. Exiting...",
-            policy_path
-        );
-        process::exit(1);
-    }
-    info!("The provided path {} does exist.", policy_path);
-    let (id_vector, _ret) = list_projects(url.clone(), token.clone()).await;
+    evaluate_path(&policy_path);
+    let response = list_projects(url.clone(), token.clone()).await?;
+    let id_vector = process_response(response).await;
     let (download_url_vector, _ret) =
         list_packages_per_project(id_vector, url.clone(), token.clone()).await;
     download_bundle(download_url_vector, token.clone(), policy_path).await?;
@@ -104,28 +93,21 @@ async fn list_packages_per_project(
     return (download_url_vector, Ok(()));
 }
 
-async fn list_projects(url: String, token: String) -> (Vec<i32>, Result<(), reqwest::Error>) {
+async fn list_projects(url: String, token: String) -> Result<String, reqwest::Error> {
     let client = reqwest::Client::new();
-
     let url = format!("{}/api/v4/projects?per_page=500&sort=asc", url);
-
     let res = client
         .get(&url)
         .header("PRIVATE-TOKEN", &token)
         .send()
-        .await
-        .expect("Request failed")
-        .text_with_charset("utf-8")
-        .await
-        .expect("Request failed");
+        .await?;
+    response_code(res.status());
+    let resposonse_body = res.text_with_charset("utf-8").await;
+    return resposonse_body;
+}
 
-    if res == String::from("{\"message\":\"401 Unauthorized\"}") {
-        error!("The provided token is unauthorized. Exiting...");
-        process::exit(1);
-    }
-
-    let v: Vec<Value> = serde_json::from_str(&res).unwrap();
-
+async fn process_response(response: String) -> Vec<i32> {
+    let v: Vec<Value> = serde_json::from_str(&response).unwrap();
     if v.len() == 0 {
         error!(
             "The provided token has access to {} projects, expected at least 1. Exiting...",
@@ -133,30 +115,25 @@ async fn list_projects(url: String, token: String) -> (Vec<i32>, Result<(), reqw
         );
         process::exit(1);
     }
-
     let mut id_vector: Vec<i32> = Vec::new();
-
     for i in &v {
         let id = i.get("id").unwrap().to_string();
         let my_int = id.parse::<i32>().unwrap();
         id_vector.push(my_int);
     }
-
-    info!(
-        "The provided token has access to {} projects.",
-        id_vector.len()
-    );
-
-    // println!("THIS IS THE LENGHT::::   {}",id_vector.len());
-    // let check = id_vector.len();
-
-    // if &id_vector.len() = 0 {
-    //     info!("The provided token has access to {} projects. Exiting...",&id_vector.len());
-    // else {
-    //     info!("The provided token has access to {} projects",&id_vector.len());
-    // }
-
-    return (id_vector, Ok(()));
+    if id_vector.len() == 0 {
+        info!(
+            "The provided token has access to {} projects. Exiting...",
+            &id_vector.len()
+        );
+        process::exit(1);
+    } else {
+        info!(
+            "The provided token has access to {} projects",
+            &id_vector.len()
+        );
+    }
+    return id_vector;
 }
 
 async fn download_bundle(
@@ -166,7 +143,7 @@ async fn download_bundle(
 ) -> Result<()> {
     let client = reqwest::Client::new();
     let file_path = format!("{}/bundle.tar.gz", policy_path);
-    println!("{}", file_path);
+    //println!("{}", file_path);
 
     for url in download_url_vector {
         let response = client
@@ -178,13 +155,38 @@ async fn download_bundle(
             .await?;
         let mut file = File::create(&file_path).expect("Creating file failed");
         let data: Result<Vec<_>, _> = response.bytes().collect();
-        let data = data.expect("Unable to read data");
-        file.write_all(&data).expect("Unable to write data");
-        file.write_all(&data).expect("Writing to the file failed");
+        let data = data?;
+        file.write_all(&data)?;
+        //file.write_all(&data)?;
+        evaluate_path(&file_path);
+
         let tar_gz = File::open(&file_path)?;
         let tar = GzDecoder::new(tar_gz);
         let mut archive = Archive::new(tar);
         archive.unpack(&policy_path)?;
     }
     Ok(())
+}
+
+fn response_code(statuscode: reqwest::StatusCode) {
+    if statuscode == reqwest::StatusCode::UNAUTHORIZED {
+        error!("The provided token is unauthorized. Exiting...");
+        process::exit(1);
+    }
+
+    if statuscode == reqwest::StatusCode::OK {
+        info!("The provided token is authorized.");
+    }
+}
+
+fn evaluate_path(path: &str) {
+    if Path::new(&path).exists() == false {
+        error!(
+            "{} does not exist. Exiting...",
+            path
+        );
+        process::exit(1);
+    } else {
+        info!("{} does exist.", path);
+    }
 }
