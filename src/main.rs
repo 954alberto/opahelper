@@ -22,11 +22,12 @@ async fn main() -> Result<()> {
     let token = m.value_of("token").unwrap().to_string();
     let policy_path = m.value_of("policy_path").unwrap().to_string();
     evaluate_path(&policy_path);
-    let response = list_projects(url.clone(), token.clone()).await?;
-    let id_vector = process_response(response).await;
-    let (download_url_vector, _ret) =
-        list_packages_per_project(id_vector, url.clone(), token.clone()).await;
-    download_bundle(download_url_vector, token.clone(), policy_path).await?;
+    // let response = list_projects(url.clone(), token.clone()).await?;
+    // let id_vector = process_response(response).await;
+    // let (download_url_vector, _ret) =
+    //     list_packages_per_project(id_vector, url.clone(), token.clone()).await;
+
+    download_bundle(url, token, policy_path).await?;
     Ok(())
 }
 
@@ -59,52 +60,52 @@ fn requirements() -> ArgMatches<'static> {
         .get_matches()
 }
 
-async fn list_packages_per_project(
-    id_vector: Vec<i32>,
-    url: String,
-    token: String,
-) -> (Vec<String>, Result<(), reqwest::Error>) {
-    let client = reqwest::Client::new();
-    let mut download_url_vector: Vec<String> = Vec::new();
+// async fn list_packages_per_project(
+//     id_vector: Vec<i32>,
+//     url: String,
+//     token: String,
+// ) -> (Vec<String>, Result<(), reqwest::Error>) {
+//     let client = reqwest::Client::new();
+//     let mut download_url_vector: Vec<String> = Vec::new();
 
-    for i in 0..id_vector.len() {
-        let url_packages = format!("{}/api/v4/projects/{}/packages", url, id_vector[i]);
-        let res = client
-            .get(&url_packages)
-            .header("PRIVATE-TOKEN", &token)
-            .send()
-            .await
-            .expect("Failed to list the packages from projects")
-            .text_with_charset("utf-8")
-            .await
-            .expect("Failed to list the packages from projects");
+//     for i in 0..id_vector.len() {
+//         let url_packages = format!("{}/api/v4/projects/{}/packages", url, id_vector[i]);
+//         let res = client
+//             .get(&url_packages)
+//             .header("PRIVATE-TOKEN", &token)
+//             .send()
+//             .await
+//             .expect("Failed to list the packages from projects")
+//             .text_with_charset("utf-8")
+//             .await
+//             .expect("Failed to list the packages from projects");
 
-        let v: Vec<Value> = serde_json::from_str(&res).unwrap();
-        let vers = v[0].get("version").unwrap().to_string();
+//         let v: Vec<Value> = serde_json::from_str(&res).unwrap();
+//         let vers = v[0].get("version").unwrap().to_string();
 
-        let version = vers.trim_matches('"').to_string();
+//         let version = vers.trim_matches('"').to_string();
 
-        let download_url = format!(
-            "{}/api/v4/projects/{}/packages/generic/bundle/{}/bundle.tar.gz",
-            url, id_vector[i], version
-        );
-        download_url_vector.push(download_url);
-    }
-    return (download_url_vector, Ok(()));
-}
+//         let download_url = format!(
+//             "{}/api/v4/projects/{}/packages/generic/bundle/{}/bundle.tar.gz",
+//             url, id_vector[i], version
+//         );
+//         download_url_vector.push(download_url);
+//     }
+//     return (download_url_vector, Ok(()));
+// }
 
-async fn list_projects(url: String, token: String) -> Result<String, reqwest::Error> {
-    let client = reqwest::Client::new();
-    let url = format!("{}/api/v4/projects?per_page=500&sort=asc", url);
-    let res = client
-        .get(&url)
-        .header("PRIVATE-TOKEN", &token)
-        .send()
-        .await?;
-    response_code(res.status());
-    let resposonse_body = res.text_with_charset("utf-8").await;
-    return resposonse_body;
-}
+// async fn list_projects(url: String, token: String) -> Result<String, reqwest::Error> {
+//     let client = reqwest::Client::new();
+//     let url = format!("{}/api/v4/projects?per_page=500&sort=asc", url);
+//     let res = client
+//         .get(&url)
+//         .header("PRIVATE-TOKEN", &token)
+//         .send()
+//         .await?;
+//     response_code(res.status());
+//     let resposonse_body = res.text_with_charset("utf-8").await;
+//     return resposonse_body;
+// }
 
 async fn process_response(response: String) -> Vec<i32> {
     let v: Vec<Value> = serde_json::from_str(&response).unwrap();
@@ -136,35 +137,31 @@ async fn process_response(response: String) -> Vec<i32> {
     return id_vector;
 }
 
-async fn download_bundle(
-    download_url_vector: Vec<String>,
-    token: String,
-    policy_path: String,
-) -> Result<()> {
+async fn download_bundle(url: String, token: String, policy_path: String) -> Result<()> {
     let client = reqwest::Client::new();
     let file_path = format!("{}/bundle.tar.gz", policy_path);
     //println!("{}", file_path);
 
-    for url in download_url_vector {
-        let response = client
-            .get(&url)
-            .header("PRIVATE-TOKEN", &token)
-            .send()
-            .await?
-            .bytes()
-            .await?;
-        let mut file = File::create(&file_path).expect("Creating file failed");
-        let data: Result<Vec<_>, _> = response.bytes().collect();
-        let data = data?;
-        file.write_all(&data)?;
-        //file.write_all(&data)?;
-        evaluate_path(&file_path);
+    let response = client
+        .get(&url)
+        .header("PRIVATE-TOKEN", &token)
+        .send()
+        .await?;
+     response_code(response.status());
+     let resposonse_body = response.bytes().await?;
 
-        let tar_gz = File::open(&file_path)?;
-        let tar = GzDecoder::new(tar_gz);
-        let mut archive = Archive::new(tar);
-        archive.unpack(&policy_path)?;
-    }
+    let mut file = File::create(&file_path).expect("Creating file failed");
+    let data: Result<Vec<_>, _> = resposonse_body.bytes().collect();
+    let data = data?;
+    file.write_all(&data)?;
+    //file.write_all(&data)?;
+    evaluate_path(&file_path);
+
+    let tar_gz = File::open(&file_path)?;
+    let tar = GzDecoder::new(tar_gz);
+    let mut archive = Archive::new(tar);
+    archive.unpack(&policy_path)?;
+
     Ok(())
 }
 
@@ -173,18 +170,18 @@ fn response_code(statuscode: reqwest::StatusCode) {
         error!("The provided token is unauthorized. Exiting...");
         process::exit(1);
     }
-
     if statuscode == reqwest::StatusCode::OK {
         info!("The provided token is authorized.");
+    }
+    if statuscode == reqwest::StatusCode::NOT_FOUND {
+        info!("The response was 404 Not Found.");
+        process::exit(1);
     }
 }
 
 fn evaluate_path(path: &str) {
     if Path::new(&path).exists() == false {
-        error!(
-            "{} does not exist. Exiting...",
-            path
-        );
+        error!("{} does not exist. Exiting...", path);
         process::exit(1);
     } else {
         info!("{} does exist.", path);
